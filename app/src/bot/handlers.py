@@ -122,18 +122,6 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             )
             return
 
-        # Повторная проверка лимита (на случай гонки)
-        if user.id != settings.admin_id and not can_send(user.id):
-            ttl = get_ttl(user.id)
-            minutes = ttl // 60
-            bot.send_message(
-                message.chat.id,
-                f"You've already sent a message recently. "
-                f"Please try again in {minutes} min.",
-                reply_markup=main_keyboard(),
-            )
-            return
-
         # Сохраняем в БД
         msg_record = None
         try:

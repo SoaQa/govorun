@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -19,6 +19,14 @@ class Settings(BaseSettings):
 
     # Группа/чат (обязательно если notify_mode = group или both)
     group_chat_id: int | None = None
+
+    @field_validator("group_chat_id", mode="before")
+    @classmethod
+    def _empty_str_to_none(cls, v: object) -> object:
+        """Пустая строка из ENV -> None."""
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
 
     @model_validator(mode="after")
     def _check_chat_ids(self) -> "Settings":

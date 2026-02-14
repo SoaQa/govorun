@@ -123,7 +123,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             return
 
         # Повторная проверка лимита (на случай гонки)
-        if not can_send(user.id):
+        if user.id != settings.admin_id and not can_send(user.id):
             ttl = get_ttl(user.id)
             minutes = ttl // 60
             bot.send_message(

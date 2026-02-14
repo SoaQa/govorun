@@ -205,3 +205,12 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific
+volumes/postgres/
+volumes/redis/
+certs/*.pem
+certs/*.key
+certs/*.crt
+!certs/.gitkeep
+!volumes/.gitkeep

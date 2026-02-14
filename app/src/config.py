@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     # Telegram
     bot_token: str
     webhook_domain: str
+    webhook_port: int = 8443
     webhook_path: str = "webhook/secret-path"
     webhook_secret_token: str = ""
 
@@ -61,7 +62,7 @@ class Settings(BaseSettings):
 
     @property
     def webhook_url(self) -> str:
-        return f"https://{self.webhook_domain}/{self.webhook_path}"
+        return f"https://{self.webhook_domain}:{self.webhook_port}/{self.webhook_path}"
 
 
 settings = Settings()

@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
+      - "${WEBHOOK_PORT:-8443}:443"
     volumes:
       - ./certs:/etc/nginx/certs:ro
     depends_on:

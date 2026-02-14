@@ -76,7 +76,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         logger.info("Write button pressed by user %d", user.id)
 
         # Проверяем лимит до перехода в состояние ожидания
-        if not can_send(user.id):
+        if user.id != settings.admin_id or not can_send(user.id):
             ttl = get_ttl(user.id)
             minutes = ttl // 60
             bot.send_message(

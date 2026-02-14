@@ -214,3 +214,4 @@ certs/*.key
 certs/*.crt
 !certs/.gitkeep
 !volumes/.gitkeep
+.idea

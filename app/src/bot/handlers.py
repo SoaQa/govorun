@@ -2,12 +2,23 @@ import telebot
 
 from src.config import settings
 from src.logging import logger
-from src.bot.keyboards import main_keyboard, WRITE_AUTHOR_BTN
+from src.bot.keyboards import main_keyboard
+from src.bot.messages import (
+    START,
+    BTN_WRITE,
+    ASK_MESSAGE,
+    RATE_LIMIT,
+    EMPTY_MESSAGE,
+    TOO_LONG,
+    SENT_OK,
+    SENT_FAIL,
+    UNKNOWN,
+    CHAT_INFO,
+)
 from src.bot.states import (
     get_state,
     set_state,
     reset_state,
-    STATE_IDLE,
     STATE_WAITING_MESSAGE,
 )
 from src.services.rate_limit import can_send, get_ttl
@@ -43,8 +54,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
 
         bot.send_message(
             message.chat.id,
-            "Hello! I'm a bot that forwards your messages to the author.\n\n"
-            "Press the button below to send a message.",
+            START,
             reply_markup=main_keyboard(),
         )
 
@@ -56,20 +66,17 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             return
 
         chat = message.chat
-        chat_type = chat.type  # private / group / supergroup / channel
+        chat_type = chat.type
         title = chat.title or chat.username or chat.first_name or "—"
 
         bot.send_message(
             chat.id,
-            f"Chat info:\n"
-            f"  ID: <code>{chat.id}</code>\n"
-            f"  Type: {chat_type}\n"
-            f"  Title: {title}",
+            CHAT_INFO.format(chat_id=chat.id, chat_type=chat_type, title=title),
             parse_mode="HTML",
         )
         logger.info("/getid by admin in chat %d (%s)", chat.id, chat_type)
 
-    @bot.message_handler(func=lambda m: m.text == WRITE_AUTHOR_BTN)
+    @bot.message_handler(func=lambda m: m.text == BTN_WRITE)
     def handle_write_button(message: telebot.types.Message) -> None:
         """Пользователь нажал кнопку 'Написать автору'."""
         user = message.from_user
@@ -81,8 +88,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             minutes = ttl // 60
             bot.send_message(
                 message.chat.id,
-                f"You've already sent a message recently. "
-                f"Please try again in {minutes} min.",
+                RATE_LIMIT.format(minutes=minutes),
                 reply_markup=main_keyboard(),
             )
             return
@@ -90,9 +96,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         set_state(user.id, STATE_WAITING_MESSAGE)
         bot.send_message(
             message.chat.id,
-            "Please type your message (max {max_len} characters):".format(
-                max_len=settings.max_message_length
-            ),
+            ASK_MESSAGE.format(max_len=settings.max_message_length),
         )
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == STATE_WAITING_MESSAGE)
@@ -108,7 +112,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         if not text:
             bot.send_message(
                 message.chat.id,
-                "The message cannot be empty. Please try again.",
+                EMPTY_MESSAGE,
                 reply_markup=main_keyboard(),
             )
             return
@@ -116,8 +120,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         if len(text) > settings.max_message_length:
             bot.send_message(
                 message.chat.id,
-                f"The message is too long ({len(text)} characters). "
-                f"Maximum is {settings.max_message_length} characters.",
+                TOO_LONG.format(length=len(text), max_len=settings.max_message_length),
                 reply_markup=main_keyboard(),
             )
             return
@@ -137,7 +140,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         except Exception as e:
             logger.error("DB error saving message: %s", e)
 
-        # Отправляем адресатам (автор / группа / оба)
+        # Отправляем адресатам (админ / группа / оба)
         result = send_to_recipients(bot, user.id, user.username, user.first_name, text)
 
         # Обновляем статус доставки
@@ -156,13 +159,13 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         if result.success:
             bot.send_message(
                 message.chat.id,
-                "Your message has been sent to the author. Thank you!",
+                SENT_OK,
                 reply_markup=main_keyboard(),
             )
         else:
             bot.send_message(
                 message.chat.id,
-                "Sorry, something went wrong. Please try again later.",
+                SENT_FAIL,
                 reply_markup=main_keyboard(),
             )
 
@@ -171,6 +174,6 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         """Обработка всех прочих сообщений."""
         bot.send_message(
             message.chat.id,
-            "Use the button below to send a message to the author.",
+            UNKNOWN,
             reply_markup=main_keyboard(),
         )

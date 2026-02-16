@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 import telebot
 
+from src.bot.messages import FWD_HEADER, FWD_USER_ID, FWD_USERNAME, FWD_FIRST_NAME
 from src.config import settings
 from src.logging import logger
 
@@ -23,13 +24,13 @@ class DeliveryResult:
 
 def format_message(user_id: int, username: str | None, first_name: str | None, text: str) -> str:
     """Форматирует сообщение для пересылки."""
-    user_info = f"User ID: {user_id}"
+    user_info = FWD_USER_ID.format(user_id=user_id)
     if username:
-        user_info += f" (@{username})"
+        user_info += FWD_USERNAME.format(username=username)
     if first_name:
-        user_info += f" [{first_name}]"
+        user_info += FWD_FIRST_NAME.format(first_name=first_name)
 
-    return f"\u2709\ufe0f New message\n\n{user_info}\n\n{text}"
+    return f"{FWD_HEADER}\n\n{user_info}\n\n{text}"
 
 
 def _send_to_chat(bot: telebot.TeleBot, chat_id: int, formatted: str, label: str, user_id: int) -> tuple[bool, str]:

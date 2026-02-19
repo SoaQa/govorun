@@ -11,7 +11,13 @@ class Repository:
     def __init__(self, session: Session):
         self.session = session
 
-    def upsert_user(self, telegram_id: int, username: str | None, first_name: str | None, last_name: str | None) -> User:
+    def upsert_user(
+        self,
+        telegram_id: int,
+        username: str | None,
+        first_name: str | None,
+        last_name: str | None,
+    ) -> User:
         """Создать или обновить пользователя."""
         stmt = select(User).where(User.telegram_id == telegram_id)
         user = self.session.execute(stmt).scalar_one_or_none()
@@ -60,3 +66,25 @@ class Repository:
             msg.delivery_status = "failed"
             msg.error = error
             self.session.commit()
+
+    def get_user_by_telegram_id(self, telegram_id: int) -> User | None:
+        """Найти пользователя по telegram_id."""
+        stmt = select(User).where(User.telegram_id == telegram_id)
+        return self.session.execute(stmt).scalar_one_or_none()
+
+    def is_user_blocked(self, telegram_id: int) -> bool:
+        """Проверить, заблокирован ли пользователь."""
+        user = self.get_user_by_telegram_id(telegram_id)
+        return bool(user and user.is_blocked)
+
+    def set_user_blocked(self, telegram_id: int, blocked: bool) -> bool:
+        """Обновить флаг блокировки пользователя."""
+        user = self.get_user_by_telegram_id(telegram_id)
+        if user is None:
+            return False
+
+        user.is_blocked = blocked
+        user.last_seen_at = datetime.now(timezone.utc)
+        self.session.commit()
+        logger.info("User block flag updated: telegram_id=%d blocked=%s", telegram_id, blocked)
+        return True

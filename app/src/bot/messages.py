@@ -41,6 +41,9 @@ FWD_USER_ID = "ID пользователя: {user_id}"
 FWD_USERNAME = " (@{username})"
 FWD_FIRST_NAME = " [{first_name}]"
 
+# Префикс ответа, который видит пользователь
+REPLY_PREFIX = "✍️ Ответ автора:\n\n{text}"
+
 # Ответ администратора
 ADMIN_REPLY_OK = "Ответ пользователю отправлен."
 ADMIN_REPLY_FAIL = "Не удалось отправить ответ пользователю."

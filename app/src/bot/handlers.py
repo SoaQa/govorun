@@ -16,6 +16,7 @@ from src.bot.messages import (
     BLOCKED,
     UNKNOWN,
     CHAT_INFO,
+    REPLY_PREFIX,
     ADMIN_REPLY_OK,
     ADMIN_REPLY_FAIL,
     ADMIN_REPLY_TARGET_NOT_FOUND,
@@ -192,7 +193,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
                 return
 
         try:
-            bot.send_message(route.user_telegram_id, text)
+            bot.send_message(route.user_telegram_id, REPLY_PREFIX.format(text=text))
             bot.send_message(message.chat.id, ADMIN_REPLY_OK)
             logger.info(
                 "Staff reply delivered: staff=%d user=%d author_message=%s",

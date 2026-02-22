@@ -1,13 +1,16 @@
 import time
 
+import sqlalchemy
 import telebot
 from alembic import command
 from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
 
 from src.config import settings
 from src.logging import logger
 from src.bot.handlers import register_handlers
 from src.bot.webhook_server import app, set_bot
+from src.storage.db import engine
 
 
 def create_bot() -> telebot.TeleBot:
@@ -35,6 +38,18 @@ def run_migrations() -> None:
     """Применить все pending-миграции Alembic при старте."""
     logger.info("Running database migrations...")
     alembic_cfg = Config("alembic.ini")
+
+    # Если таблицы уже есть, а alembic_version — нет,
+    # значит БД создана через create_all; штампуем начальную ревизию.
+    with engine.connect() as conn:
+        context = MigrationContext.configure(conn)
+        current_rev = context.get_current_revision()
+        has_tables = sqlalchemy.inspect(conn).has_table("users")
+
+    if current_rev is None and has_tables:
+        logger.info("Existing database without alembic_version detected, stamping 001_initial...")
+        command.stamp(alembic_cfg, "001_initial")
+
     command.upgrade(alembic_cfg, "head")
     logger.info("Database migrations applied")
 

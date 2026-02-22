@@ -55,6 +55,12 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             command_token = command_token.split("@", 1)[0]
         return command_token
 
+    def _user_keyboard(message: telebot.types.Message) -> telebot.types.ReplyKeyboardMarkup | telebot.types.ReplyKeyboardRemove:
+        """Клавиатура с кнопкой — только для обычных пользователей в ЛС."""
+        if message.chat.type == "private" and not is_staff(message.from_user.id):
+            return main_keyboard()
+        return telebot.types.ReplyKeyboardRemove()
+
     def _is_feedback_blocked(user_id: int) -> bool:
         return not is_staff(user_id) and ban_service.is_banned(user_id)
 
@@ -73,7 +79,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         bot.send_message(
             message.chat.id,
             BLOCKED,
-            reply_markup=main_keyboard(),
+            reply_markup=_user_keyboard(message),
         )
         return True
 
@@ -105,7 +111,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         bot.send_message(
             message.chat.id,
             START,
-            reply_markup=main_keyboard(),
+            reply_markup=_user_keyboard(message),
         )
 
     @bot.message_handler(commands=["getid"])
@@ -227,7 +233,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             bot.send_message(
                 message.chat.id,
                 RATE_LIMIT.format(minutes=minutes),
-                reply_markup=main_keyboard(),
+                reply_markup=_user_keyboard(message),
             )
             return
 
@@ -253,7 +259,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             bot.send_message(
                 message.chat.id,
                 UNKNOWN,
-                reply_markup=main_keyboard(),
+                reply_markup=_user_keyboard(message),
             )
             return
 
@@ -262,7 +268,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             bot.send_message(
                 message.chat.id,
                 EMPTY_MESSAGE,
-                reply_markup=main_keyboard(),
+                reply_markup=_user_keyboard(message),
             )
             return
 
@@ -270,7 +276,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             bot.send_message(
                 message.chat.id,
                 TOO_LONG.format(length=len(text), max_len=settings.max_message_length),
-                reply_markup=main_keyboard(),
+                reply_markup=_user_keyboard(message),
             )
             return
 
@@ -328,20 +334,20 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             bot.send_message(
                 message.chat.id,
                 SENT_OK,
-                reply_markup=main_keyboard(),
+                reply_markup=_user_keyboard(message),
             )
         else:
             bot.send_message(
                 message.chat.id,
                 SENT_FAIL,
-                reply_markup=main_keyboard(),
+                reply_markup=_user_keyboard(message),
             )
 
-    @bot.message_handler(func=lambda m: True)
+    @bot.message_handler(func=lambda m: m.chat.type == "private")
     def handle_unknown(message: telebot.types.Message) -> None:
-        """Обработка всех прочих сообщений."""
+        """Обработка прочих сообщений в ЛС."""
         bot.send_message(
             message.chat.id,
             UNKNOWN,
-            reply_markup=main_keyboard(),
+            reply_markup=_user_keyboard(message),
         )

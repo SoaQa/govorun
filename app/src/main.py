@@ -1,13 +1,13 @@
 import time
 
 import telebot
+from alembic import command
+from alembic.config import Config
 
 from src.config import settings
 from src.logging import logger
 from src.bot.handlers import register_handlers
 from src.bot.webhook_server import app, set_bot
-from src.storage.db import engine
-from src.storage.models import Base
 
 
 def create_bot() -> telebot.TeleBot:
@@ -31,18 +31,19 @@ def setup_webhook(bot: telebot.TeleBot) -> None:
     logger.info("Webhook set successfully")
 
 
-def init_db() -> None:
-    """Создать таблицы, если их нет (для простоты MVP)."""
-    logger.info("Initializing database tables...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables ready")
+def run_migrations() -> None:
+    """Применить все pending-миграции Alembic при старте."""
+    logger.info("Running database migrations...")
+    alembic_cfg = Config("alembic.ini")
+    command.upgrade(alembic_cfg, "head")
+    logger.info("Database migrations applied")
 
 
 def main() -> None:
     logger.info("Starting govorun bot...")
 
-    # Инициализация БД
-    init_db()
+    # Применяем миграции
+    run_migrations()
 
     # Создание бота и регистрация хендлеров
     bot = create_bot()

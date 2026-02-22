@@ -3,6 +3,7 @@ import telebot
 from src.config import settings
 from src.logging import logger
 from src.bot.keyboards import main_keyboard
+from src.bot.permissions import is_admin, is_staff
 from src.bot.messages import (
     START,
     BTN_WRITE,
@@ -54,7 +55,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         return command_token
 
     def _is_feedback_blocked(user_id: int) -> bool:
-        return user_id != settings.admin_id and ban_service.is_banned(user_id)
+        return not is_staff(user_id) and ban_service.is_banned(user_id)
 
     def _reject_banned_feedback(
         message: telebot.types.Message,
@@ -108,9 +109,9 @@ def register_handlers(bot: telebot.TeleBot) -> None:
 
     @bot.message_handler(commands=["getid"])
     def handle_getid(message: telebot.types.Message) -> None:
-        """Показать chat_id текущего чата. Доступно только админу."""
+        """Показать chat_id текущего чата. Доступно staff (админ + модераторы)."""
         user = message.from_user
-        if user.id != settings.admin_id:
+        if not is_staff(user.id):
             return
 
         chat = message.chat
@@ -127,7 +128,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
     @bot.message_handler(
         func=lambda m: (
             bool(m.from_user)
-            and m.from_user.id == settings.admin_id
+            and is_staff(m.from_user.id)
             and m.reply_to_message is not None
             and (
                 m.chat.id == settings.admin_id
@@ -139,8 +140,8 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             )
         )
     )
-    def handle_admin_reply(message: telebot.types.Message) -> None:
-        """Ответ администратора на пересланное сообщение пользователя."""
+    def handle_staff_reply(message: telebot.types.Message) -> None:
+        """Ответ staff на пересланное сообщение: reply (только админ), /ban /unban (staff)."""
         text = (message.text or "").strip()
         if not text:
             return
@@ -174,24 +175,25 @@ def register_handlers(bot: telebot.TeleBot) -> None:
                 bot.send_message(message.chat.id, ADMIN_UNBAN_OK)
             return
 
-        if message.chat.id != settings.admin_id:
+        # Ответ пользователю — только админ в ЛС с ботом
+        if not is_admin(message.from_user.id) or message.chat.id != settings.admin_id:
             return
 
         try:
             bot.send_message(route.user_telegram_id, text)
             bot.send_message(message.chat.id, ADMIN_REPLY_OK)
             logger.info(
-                "Admin reply delivered: admin=%d user=%d feedback_id=%s",
+                "Admin reply delivered: admin=%d user=%d author_message=%s",
                 message.from_user.id,
                 route.user_telegram_id,
-                route.feedback_id,
+                route.author_message_id,
             )
         except Exception as e:
             logger.error(
-                "Failed to deliver admin reply: admin=%d user=%d feedback_id=%s err=%s",
+                "Failed to deliver admin reply: admin=%d user=%d author_message=%s err=%s",
                 message.from_user.id,
                 route.user_telegram_id,
-                route.feedback_id,
+                route.author_message_id,
                 e,
             )
             bot.send_message(message.chat.id, ADMIN_REPLY_FAIL)
@@ -205,8 +207,8 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         if _reject_banned_feedback(message):
             return
 
-        # Проверяем лимит до перехода в состояние ожидания
-        if user.id != settings.admin_id and not can_send(user.id):
+        # Проверяем лимит до перехода в состояние ожидания (staff не ограничен)
+        if not is_staff(user.id) and not can_send(user.id):
             ttl = get_ttl(user.id)
             minutes = ttl // 60
             bot.send_message(
@@ -234,7 +236,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         # Сброс состояния в любом случае
         reset_state(user.id)
 
-        if user.id != settings.admin_id and _extract_command(text):
+        if not is_staff(user.id) and _extract_command(text):
             bot.send_message(
                 message.chat.id,
                 UNKNOWN,
@@ -290,7 +292,7 @@ def register_handlers(bot: telebot.TeleBot) -> None:
             identity=identity,
             text=text,
             identity_resolver=identity_resolver,
-            feedback_id=msg_record.id if msg_record else None,
+            author_message_id=msg_record.id if msg_record else None,
         )
 
         # Обновляем статус доставки

@@ -1,4 +1,3 @@
-import json
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -8,7 +7,6 @@ from sqlalchemy.orm import Session
 from src.bot.messages import FWD_HEADER, FWD_USER_ID, FWD_USERNAME, FWD_FIRST_NAME
 from src.config import settings
 from src.logging import logger
-from src.services.rate_limit import get_redis
 from src.storage.db import get_session
 from src.storage.repo import Repository
 
@@ -75,12 +73,14 @@ class FeedbackIdentity:
 @dataclass(frozen=True)
 class FeedbackRoute:
     user_telegram_id: int
-    feedback_id: int | None
+    author_message_id: int | None
 
 
 class FeedbackIdentityResolver:
-    _MAP_KEY_PREFIX = "feedback:admin_message"
-    _MAP_TTL_SECONDS = 60 * 60 * 24 * 30
+    """Маппинг пересланных сообщений ↔ пользователей (хранение в Postgres)."""
+
+    def __init__(self, session_factory: Callable[[], Session] = get_session):
+        self._session_factory = session_factory
 
     @staticmethod
     def _clean(value: str | None) -> str | None:
@@ -112,80 +112,67 @@ class FeedbackIdentityResolver:
         admin_chat_id: int,
         admin_message_id: int,
         identity: FeedbackIdentity,
-        feedback_id: int | None = None,
+        author_message_id: int | None = None,
     ) -> None:
-        key = self._mapping_key(admin_chat_id, admin_message_id)
-        payload = {
-            "user_telegram_id": identity.telegram_id,
-            "feedback_id": feedback_id,
-        }
+        """Сохранить связку пересланного сообщения с пользователем в БД."""
+        session = None
         try:
-            redis_client = get_redis()
-            redis_client.set(
-                key,
-                json.dumps(payload, ensure_ascii=True),
-                ex=self._MAP_TTL_SECONDS,
+            session = self._session_factory()
+            repo = Repository(session)
+            repo.create_mapping(
+                chat_id=admin_chat_id,
+                message_id=admin_message_id,
+                user_telegram_id=identity.telegram_id,
+                author_message_id=author_message_id,
             )
             logger.info(
-                "Stored feedback mapping: admin_chat=%d admin_message=%d user=%d feedback_id=%s",
+                "Stored feedback mapping: chat=%d message=%d user=%d author_message=%s",
                 admin_chat_id,
                 admin_message_id,
                 identity.telegram_id,
-                feedback_id,
+                author_message_id,
             )
         except Exception as e:
             logger.error(
-                "Failed to store feedback mapping for admin message %d in chat %d: %s",
+                "Failed to store feedback mapping for message %d in chat %d: %s",
                 admin_message_id,
                 admin_chat_id,
                 e,
             )
+        finally:
+            if session is not None:
+                session.close()
 
     def resolve_by_admin_message(self, admin_chat_id: int, admin_message_id: int) -> FeedbackRoute | None:
-        key = self._mapping_key(admin_chat_id, admin_message_id)
+        """Найти пользователя по пересланному сообщению."""
+        session = None
         try:
-            redis_client = get_redis()
-            raw_payload = redis_client.get(key)
+            session = self._session_factory()
+            repo = Repository(session)
+            mapping = repo.resolve_mapping(chat_id=admin_chat_id, message_id=admin_message_id)
+            if mapping is None:
+                return None
+            return FeedbackRoute(
+                user_telegram_id=mapping.user_telegram_id,
+                author_message_id=mapping.author_message_id,
+            )
         except Exception as e:
             logger.error(
-                "Failed to read feedback mapping for admin message %d in chat %d: %s",
+                "Failed to resolve feedback mapping for message %d in chat %d: %s",
                 admin_message_id,
                 admin_chat_id,
                 e,
             )
             return None
-
-        if not raw_payload:
-            return None
-
-        try:
-            payload = json.loads(raw_payload)
-            user_telegram_id = int(payload["user_telegram_id"])
-            raw_feedback_id = payload.get("feedback_id")
-            feedback_id = int(raw_feedback_id) if raw_feedback_id is not None else None
-            return FeedbackRoute(
-                user_telegram_id=user_telegram_id,
-                feedback_id=feedback_id,
-            )
-        except (TypeError, ValueError, KeyError, json.JSONDecodeError) as e:
-            logger.error(
-                "Invalid feedback mapping payload for admin message %d in chat %d: %s",
-                admin_message_id,
-                admin_chat_id,
-                e,
-            )
-            return None
-
-    def _mapping_key(self, admin_chat_id: int, admin_message_id: int) -> str:
-        return f"{self._MAP_KEY_PREFIX}:{admin_chat_id}:{admin_message_id}"
+        finally:
+            if session is not None:
+                session.close()
 
 
 @dataclass
 class DeliveryResult:
     """Результат доставки сообщения по всем адресатам."""
-    # Хотя бы один адресат получил сообщение
     success: bool = False
-    # Детали по каждому адресату: chat_id -> (ok, error_text)
     details: dict[int, tuple[bool, str]] = field(default_factory=dict)
 
     @property
@@ -228,7 +215,7 @@ def send_to_recipients(
     identity: FeedbackIdentity,
     text: str,
     identity_resolver: FeedbackIdentityResolver | None = None,
-    feedback_id: int | None = None,
+    author_message_id: int | None = None,
 ) -> DeliveryResult:
     """
     Отправить сообщение адресатам согласно NOTIFY_MODE.
@@ -241,7 +228,6 @@ def send_to_recipients(
     formatted = format_message(identity, text)
     result = DeliveryResult()
 
-    # Собираем список адресатов
     targets: list[tuple[int, str]] = []
     if settings.notify_mode in ("admin", "both"):
         targets.append((settings.admin_id, "admin"))
@@ -262,9 +248,8 @@ def send_to_recipients(
                 admin_chat_id=chat_id,
                 admin_message_id=sent_message_id,
                 identity=identity,
-                feedback_id=feedback_id,
+                author_message_id=author_message_id,
             )
 
-    # Считаем успехом, если хотя бы один адресат получил
     result.success = any(ok for ok, _ in result.details.values())
     return result

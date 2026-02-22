@@ -15,6 +15,20 @@ class Settings(BaseSettings):
     # Telegram ID администратора (используется для пересылки ЛС и проверки прав)
     admin_id: int
 
+    # Telegram ID модераторов (через запятую: 111,222,333)
+    moderator_ids: list[int] = []
+
+    @field_validator("moderator_ids", mode="before")
+    @classmethod
+    def _parse_moderator_ids(cls, v: object) -> object:
+        """Парсинг строки с ID через запятую из ENV."""
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return []
+            return [int(x.strip()) for x in v.split(",") if x.strip()]
+        return v
+
     # Куда пересылать сообщения: admin / group / both
     notify_mode: Literal["admin", "group", "both"] = "admin"
 

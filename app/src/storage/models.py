@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, String, Text, DateTime, Boolean, ForeignKey, func
+from sqlalchemy import BigInteger, Integer, String, Text, DateTime, Boolean, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -40,3 +40,22 @@ class AuthorMessage(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     delivery_status: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class MessageMapping(Base):
+    """Связь между пересланным сообщением в чате staff и исходным пользователем."""
+    __tablename__ = "message_mappings"
+    __table_args__ = (
+        UniqueConstraint("chat_id", "message_id", name="uq_mapping_chat_message"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    message_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_telegram_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    author_message_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("author_messages.id"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

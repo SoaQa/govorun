@@ -1,11 +1,11 @@
 """WSGI entrypoint для gunicorn."""
-from src.main import create_bot, setup_webhook, init_db
+from src.main import create_bot, setup_webhook, run_migrations
 from src.bot.webhook_server import app, set_bot
 from src.logging import logger
 
 logger.info("WSGI: Initializing application...")
 
-init_db()
+run_migrations()
 
 bot = create_bot()
 set_bot(bot)

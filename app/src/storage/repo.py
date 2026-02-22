@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.logging import logger
-from src.storage.models import User, AuthorMessage
+from src.storage.models import User, AuthorMessage, MessageMapping
 
 
 class Repository:
@@ -88,3 +88,31 @@ class Repository:
         self.session.commit()
         logger.info("User block flag updated: telegram_id=%d blocked=%s", telegram_id, blocked)
         return True
+
+    # --- MessageMapping ---
+
+    def create_mapping(
+        self,
+        chat_id: int,
+        message_id: int,
+        user_telegram_id: int,
+        author_message_id: int | None = None,
+    ) -> MessageMapping:
+        """Сохранить связку пересланного сообщения с пользователем."""
+        mapping = MessageMapping(
+            chat_id=chat_id,
+            message_id=message_id,
+            user_telegram_id=user_telegram_id,
+            author_message_id=author_message_id,
+        )
+        self.session.add(mapping)
+        self.session.commit()
+        return mapping
+
+    def resolve_mapping(self, chat_id: int, message_id: int) -> MessageMapping | None:
+        """Найти маппинг по chat_id и message_id пересланного сообщения."""
+        stmt = select(MessageMapping).where(
+            MessageMapping.chat_id == chat_id,
+            MessageMapping.message_id == message_id,
+        )
+        return self.session.execute(stmt).scalar_one_or_none()

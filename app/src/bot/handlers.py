@@ -125,23 +125,27 @@ def register_handlers(bot: telebot.TeleBot) -> None:
         )
         logger.info("/getid by admin in chat %d (%s)", chat.id, chat_type)
 
+    _STAFF_COMMANDS = ("/ban", "/unban", "/reply")
+
     @bot.message_handler(
         func=lambda m: (
             bool(m.from_user)
             and is_staff(m.from_user.id)
             and m.reply_to_message is not None
             and (
+                # В ЛС админа — любой reply или команда
                 m.chat.id == settings.admin_id
+                # В группе — только staff-команды
                 or (
                     group_chat_id is not None
                     and m.chat.id == group_chat_id
-                    and _extract_command(m.text or "") in ("/ban", "/unban")
+                    and _extract_command(m.text or "") in _STAFF_COMMANDS
                 )
             )
         )
     )
     def handle_staff_reply(message: telebot.types.Message) -> None:
-        """Ответ staff на пересланное сообщение: reply (только админ), /ban /unban (staff)."""
+        """Обработка reply на пересланное сообщение: /reply, /ban, /unban, plain text."""
         text = (message.text or "").strip()
         if not text:
             return
@@ -175,22 +179,30 @@ def register_handlers(bot: telebot.TeleBot) -> None:
                 bot.send_message(message.chat.id, ADMIN_UNBAN_OK)
             return
 
-        # Ответ пользователю — только админ в ЛС с ботом
-        if not is_admin(message.from_user.id) or message.chat.id != settings.admin_id:
-            return
+        # /reply <текст> — извлекаем текст после команды
+        if command == "/reply":
+            reply_text = text.split(maxsplit=1)[1] if len(text.split(maxsplit=1)) > 1 else ""
+            reply_text = reply_text.strip()
+            if not reply_text:
+                return
+            text = reply_text
+        else:
+            # Простой reply без команды — только админ в ЛС с ботом
+            if not is_admin(message.from_user.id) or message.chat.id != settings.admin_id:
+                return
 
         try:
             bot.send_message(route.user_telegram_id, text)
             bot.send_message(message.chat.id, ADMIN_REPLY_OK)
             logger.info(
-                "Admin reply delivered: admin=%d user=%d author_message=%s",
+                "Staff reply delivered: staff=%d user=%d author_message=%s",
                 message.from_user.id,
                 route.user_telegram_id,
                 route.author_message_id,
             )
         except Exception as e:
             logger.error(
-                "Failed to deliver admin reply: admin=%d user=%d author_message=%s err=%s",
+                "Failed to deliver staff reply: staff=%d user=%d author_message=%s err=%s",
                 message.from_user.id,
                 route.user_telegram_id,
                 route.author_message_id,
